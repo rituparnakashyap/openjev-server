@@ -8,6 +8,7 @@ top_logprobs matched by text (the old protocol), where a missing label is floore
 from __future__ import annotations
 
 import asyncio
+import weakref
 import json
 import logging
 import math
@@ -57,17 +58,37 @@ class VllmBackend:
         self.model = options.model
         self.exact = options.exact
         self.assistant_prefix = options.assistant_prefix
-        self._client = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=httpx.Timeout(options.timeout_s, connect=10.0),
-            limits=httpx.Limits(max_connections=options.max_connections, max_keepalive_connections=options.max_connections),
-            headers={"Authorization": f"Bearer {options.api_key}", "Content-Type": "application/json"},
-        )
+        self._clients: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+        self._override: httpx.AsyncClient | None = None
         self._tok = AutoTokenizer.from_pretrained(tokenizer)
         self._ids, self.letter_prefix = letter_ids(self._tok, options.letter_prefix)
         self._header = header_counter(self._tok, options.assistant_prefix)
         self.chat = has_chat_template(self._tok)
         self.vision = detect_vision(tokenizer)
+
+    def _make_client(self) -> httpx.AsyncClient:
+        o = self.options
+        return httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=httpx.Timeout(o.timeout_s, connect=10.0),
+            limits=httpx.Limits(max_connections=o.max_connections, max_keepalive_connections=o.max_connections),
+            headers={"Authorization": f"Bearer {o.api_key}", "Content-Type": "application/json"},
+        )
+
+    @property
+    def _client(self) -> httpx.AsyncClient:
+        """One client per running event loop: start() and the probe may run under separate asyncio.run calls."""
+        if self._override is not None:
+            return self._override
+        loop = asyncio.get_running_loop()
+        c = self._clients.get(loop)
+        if c is None or c.is_closed:
+            c = self._clients[loop] = self._make_client()
+        return c
+
+    @_client.setter
+    def _client(self, value: httpx.AsyncClient) -> None:
+        self._override = value
 
     # ---- contract
 

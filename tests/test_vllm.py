@@ -90,3 +90,15 @@ def test_start_discovers_model_and_exact_support(tokenizer_path):
     b.model = None
     found = asyncio.run(b.start())
     assert found["served_model"] == "served-name" and found["exact_readout"] is True and found["letter_prefix"] == b.letter_prefix
+
+
+def test_client_survives_separate_event_loops(tokenizer_path):
+    """start() and the probe run under different asyncio.run calls; a client bound to the first loop must not be reused."""
+    b = VllmBackend("http://fake/v1", tokenizer_path, VllmOptions(model="m"))
+
+    async def grab():
+        return b._client
+
+    first = asyncio.run(grab())
+    second = asyncio.run(grab())
+    assert first is not second
