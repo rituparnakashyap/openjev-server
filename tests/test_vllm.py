@@ -102,3 +102,20 @@ def test_client_survives_separate_event_loops(tokenizer_path):
     first = asyncio.run(grab())
     second = asyncio.run(grab())
     assert first is not second
+
+
+def test_transient_500_is_retried(tokenizer_path):
+    """vLLM+MTP intermittently 500s logprob requests under load; a retry succeeds."""
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) < 4:
+            return httpx.Response(500, text="IndexError")
+        body = json.loads(request.content)
+        return chat_response([{"token": f"token_id:{i}", "logprob": -0.5 * n} for n, i in enumerate(body["logprob_token_ids"])])
+
+    b = make_backend(tokenizer_path, handler, exact=True)
+    ids = [b.letter_ids()[c] for c in "AB"]
+    scores, _ = asyncio.run(b.logprobs("hi", ids))
+    assert scores == [0.0, -0.5] and len(calls) == 4

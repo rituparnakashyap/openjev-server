@@ -48,6 +48,9 @@ def detect_vision(tokenizer: str) -> bool | None:
         return None
 
 
+MAX_500_RETRIES = 10
+
+
 class VllmBackend:
     def __init__(self, base_url: str, tokenizer: str, options: VllmOptions | None = None):
         from transformers import AutoTokenizer
@@ -218,11 +221,16 @@ class VllmBackend:
     async def _post(self, body: dict, path: str = "/chat/completions") -> dict:
         retries = self.options.retries
         last: Exception | None = None
-        for attempt in range(retries + 1):
+        for attempt in range(max(retries, MAX_500_RETRIES) + 1):
             try:
                 r = await self._client.post(path, json=body)
                 if r.status_code in (429, 503) and attempt < retries:
                     await asyncio.sleep(0.3 * 2**attempt + random.random() * 0.1)
+                    continue
+                if r.status_code == 500 and attempt < max(retries, MAX_500_RETRIES):
+                    # vLLM + MTP speculative decoding intermittently 500s a max_tokens=1 logprobs request while other
+                    # requests are decoding (IndexError in _create_chat_logprobs). It is per-attempt, so retry fast.
+                    await asyncio.sleep(0.02 + random.random() * 0.05)
                     continue
                 if r.status_code != 200:
                     raise BackendError(f"backend HTTP {r.status_code}: {r.text[:200]}")
