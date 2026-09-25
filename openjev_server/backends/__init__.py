@@ -21,6 +21,7 @@ def make_backend(s: Settings, profile: Profile) -> tuple[Backend, dict]:
             max_connections=s.max_connections,
             letter_prefix=profile.letter_prefix,
             assistant_prefix=profile.assistant_prefix,
+            exact=s.exact,
         )
         return VllmBackend(s.vllm_url, s.model, opts), {"vllm_url": s.vllm_url}
     if s.backend == "mlx":

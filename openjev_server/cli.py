@@ -76,6 +76,7 @@ def main(argv=None):
     s.add_argument("--perms", type=int, help="average over N option orders (accuracy mode; costs latency)")
     s.add_argument("--temp", type=float)
     s.add_argument("--noul-t", dest="noul_t", type=float)
+    s.add_argument("--exact", dest="exact", action=argparse.BooleanOptionalAction, default=None, help="vllm: force (or disable) the exact logprob_token_ids readout")
     s.add_argument("--no-prefix-cache", dest="prefix_cache", action="store_false", default=None)
     s.add_argument(
         "--assistant-prefix",

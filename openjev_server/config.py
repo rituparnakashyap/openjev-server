@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     max_connections: int = 64
     timeout_s: float = 120.0
     prefix_cache: bool = True  # mlx only
+    exact: bool | None = None  # vllm: None = autodetect logprob_token_ids; False = top_logprobs by text (needed with MTP speculative decoding)
     log_level: str = "INFO"
 
 
